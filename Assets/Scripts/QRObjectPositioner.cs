@@ -10,20 +10,21 @@ using System.Collections.Generic;
 /// セットアップ:
 /// 1. 新規 GameObject "QRObjectPositioner" を作成
 /// 2. このスクリプトをアタッチ
-/// 3. Inspector で QRCodeTracker_MRUK を割り当て
-/// 4. "ObjectPrefab" に表示したいオブジェクト（キューブやスフィア）を割り当て
+/// 3. Prefabs/Cube.prefab と Prefabs/Sphere.prefab をそれぞれ割り当て
+/// 4. QRManager (Singleton) が QR イベントを配信するため追加設定なし
 /// </summary>
 public class QRObjectPositioner : MonoBehaviour
 {
     [Header("References")]
-    [SerializeField, HideInInspector] private QRCodeTracker_MRUK qrCodeTracker;
-    [SerializeField] private GameObject objectPrefab;
+    [SerializeField] private GameObject cubePrefab;
+    [SerializeField] private GameObject spherePrefab;
     [SerializeField] private bool enablePositioningLogging = true;
 
     [Header("Positioning Settings")]
     [SerializeField] private Vector3 positionOffset = Vector3.zero;
     [SerializeField] private bool rotateWithQR = true;
     [SerializeField] private float cubeScale = 0.2f;  // Cube（マーカー）のスケール
+    [SerializeField] private float cubeHeightOffset = 0.0f; // Cube の高さオフセット
     [SerializeField] private float sphereScale = 0.15f;  // Sphere（当たり判定用）のスケール
     [SerializeField] private float sphereHeightOffset = 0.35f;  // Sphere を Cube の上に配置するオフセット（0.25 → 0.35）
 
@@ -32,20 +33,49 @@ public class QRObjectPositioner : MonoBehaviour
     // QR UUID → Sphere オブジェクトの マッピング
     private Dictionary<string, GameObject> qrSphereObjects = new Dictionary<string, GameObject>();
 
-    private bool subscribed = false;
-
     private void Start()
     {
         LogPos("[START] QRObjectPositioner initializing...");
 
-        // QRCodeTracker_MRUK が指定されていなければ自動探索
-        AutoAssignTrackerIfNeeded();
+        LogPos($"[START] Cube Prefab (Inspector): {(cubePrefab != null ? cubePrefab.name : "null")}");
+        LogPos($"[START] Sphere Prefab (Inspector): {(spherePrefab != null ? spherePrefab.name : "null")}");
 
-        // オブジェクト Prefab が指定されていなければ デフォルト生成
-        if (objectPrefab == null)
+        // Inspector 未設定なら Resources から読み込みを試みる（最終的に null なら停止）
+        if (cubePrefab == null)
         {
-            LogWarningPos("[START] ⚠ objectPrefab not assigned. Creating default cube...");
-            objectPrefab = CreateDefaultObjectPrefab();
+            cubePrefab = Resources.Load<GameObject>("Prefabs/Cube");
+            LogWarningPos(cubePrefab != null
+                ? "[START] ⚠ cubePrefab not assigned. Loaded from Resources/Prefabs/Cube"
+                : "[START] ⚠ cubePrefab missing (Inspector & Resources).");
+        }
+
+        if (spherePrefab == null)
+        {
+            spherePrefab = Resources.Load<GameObject>("Prefabs/Sphere");
+            LogWarningPos(spherePrefab != null
+                ? "[START] ⚠ spherePrefab not assigned. Loaded from Resources/Prefabs/Sphere"
+                : "[START] ⚠ spherePrefab missing (Inspector & Resources).");
+        }
+
+        if (cubePrefab == null || spherePrefab == null)
+        {
+            LogErrorPos("[START] Prefabs are missing. Please assign Cube/Sphere prefabs in the Inspector or place them under Resources/Prefabs.");
+            enabled = false;
+            return;
+        }
+
+        // QRManager のイベントに登録
+        if (QRManager.Instance != null)
+        {
+            QRManager.Instance.OnQRAdded += OnQRAdded;
+            QRManager.Instance.OnQRLost += OnQRLost;
+            LogPos("[START] ✓ Registered to QRManager events");
+        }
+        else
+        {
+            LogErrorPos("[START] QRManager instance not found!");
+            enabled = false;
+            return;
         }
 
         LogPos("[START] ✓ QRObjectPositioner ready");
@@ -56,67 +86,31 @@ public class QRObjectPositioner : MonoBehaviour
         LogPos($"[START] Sphere Height Offset: {sphereHeightOffset}");
     }
 
-    private void OnEnable()
+    private void OnDestroy()
     {
-        // QR 検出・喪失イベントを購読
-        AutoAssignTrackerIfNeeded();
-        EnsureSubscribed();
-    }
-
-    private void OnDisable()
-    {
-        // イベント登録解除
-        Unsubscribe();
-    }
-
-    private void OnValidate()
-    {
-        // インスペクタ上の参照抜けを防ぐため、自動でシーン内のトラッカーを拾う
-        AutoAssignTrackerIfNeeded();
-    }
-
-    private void AutoAssignTrackerIfNeeded()
-    {
-        // 既存参照が無効（Disable や非アクティブ）なら捨てて再検索する
-        if (qrCodeTracker != null && (!qrCodeTracker.enabled || !qrCodeTracker.gameObject.activeInHierarchy))
+        if (QRManager.Instance != null)
         {
-            LogWarningPos("[AutoAssign] Existing QRCodeTracker is disabled or inactive. Reassigning...");
-            qrCodeTracker = null;
-        }
-
-        if (qrCodeTracker == null)
-        {
-            qrCodeTracker = FindFirstObjectByType<QRCodeTracker_MRUK>();
-            if (qrCodeTracker != null)
-            {
-                LogPos("[AutoAssign] ✓ QRCodeTracker_MRUK auto-assigned");
-            }
-            else
-            {
-                LogErrorPos("[AutoAssign] ✖ QRCodeTracker_MRUK not found (active & enabled) - positioning disabled");
-            }
+            QRManager.Instance.OnQRAdded -= OnQRAdded;
+            QRManager.Instance.OnQRLost -= OnQRLost;
+            LogPos("[OnDestroy] ✓ Event listeners unregistered");
         }
     }
 
-    private void EnsureSubscribed()
+    // 既存の OnQRDetected を OnQRAdded にリネーム
+    private void OnQRAdded(QRInfo info)
     {
-        if (qrCodeTracker == null || subscribed) return;
-
-        qrCodeTracker.OnQRDetected += OnQRDetected;
-        qrCodeTracker.OnQRLost += OnQRLost;
-        subscribed = true;
-        LogPos("[Subscribe] ✓ Event listeners registered");
-    }
-
-    private void Unsubscribe()
-    {
-        if (qrCodeTracker != null && subscribed)
+        if (info == null)
         {
-            qrCodeTracker.OnQRDetected -= OnQRDetected;
-            qrCodeTracker.OnQRLost -= OnQRLost;
-            LogPos("[Unsubscribe] ✓ Event listeners unregistered");
+            LogErrorPos("[QR_ADDED] QRInfo is null");
+            return;
         }
-        subscribed = false;
+
+        if (cubePrefab == null || spherePrefab == null)
+        {
+            LogErrorPos("[QR_ADDED] Prefabs are missing. Skip instantiation. (Assign in Inspector or put under Resources/Prefabs)");
+            return;
+        }
+        OnQRDetected(info.uuid, info.lastPose.position, info.lastPose.rotation);
     }
 
     /// <summary>
@@ -126,6 +120,12 @@ public class QRObjectPositioner : MonoBehaviour
     {
         LogPos($"[QR_DETECTED] UUID: {uuid}");
         LogPos($"[QR_DETECTED] Position: {position}");
+
+        if (cubePrefab == null || spherePrefab == null)
+        {
+            LogErrorPos("[QR_DETECTED] Prefabs are missing. Skip instantiation. (Assign in Inspector or put under Resources/Prefabs)");
+            return;
+        }
 
         if (!qrMarkerObjects.ContainsKey(uuid))
         {
@@ -140,19 +140,31 @@ public class QRObjectPositioner : MonoBehaviour
             parentObject.transform.SetParent(transform);
 
             // Cube（マーカー）生成 - QR 位置表示用（削除されない）
-            GameObject cubeMarker = CreateCubeMarker();
-            cubeMarker.transform.SetParent(parentObject.transform);
-            cubeMarker.transform.localPosition = Vector3.zero;
+            GameObject cubeMarker = Instantiate(cubePrefab, parentObject.transform);
+            cubeMarker.transform.localPosition = new Vector3(0f, cubeHeightOffset, 0f);
             cubeMarker.transform.localRotation = Quaternion.identity;
-            cubeMarker.transform.localScale = Vector3.one * cubeScale;
+            cubeMarker.transform.localScale = cubePrefab.transform.localScale * cubeScale;
             cubeMarker.name = "CubeMarker";
 
+            // UUID を紐付けて色を管理
+            CubeColorOnQr cubeColor = cubeMarker.GetComponent<CubeColorOnQr>();
+            if (cubeColor != null)
+            {
+                cubeColor.Initialize(uuid);
+                cubeColor.OnQrRecognized(uuid); // 初回検出時に色を反映
+            }
+            else
+            {
+                LogWarningPos("[QR_DETECTED] CubeColorOnQr not found on Cube prefab");
+            }
+
             // Sphere（当たり判定用）生成 - Cube の上に配置
-            GameObject sphere = CreateSphereWithCollider();
-            sphere.transform.SetParent(parentObject.transform);
-            sphere.transform.localPosition = new Vector3(0, sphereHeightOffset, 0);
+            GameObject sphere = Instantiate(spherePrefab);
+            float sphereWorldHeight = cubeHeightOffset + sphereHeightOffset;
+            sphere.transform.position = finalPosition + Vector3.up * sphereWorldHeight;
+            sphere.transform.SetParent(parentObject.transform, true); // world position stays
             sphere.transform.localRotation = Quaternion.identity;
-            sphere.transform.localScale = Vector3.one * sphereScale;
+            sphere.transform.localScale = spherePrefab.transform.localScale * sphereScale;
             sphere.name = "CollisionSphere";
 
             qrMarkerObjects[uuid] = parentObject;
@@ -179,11 +191,12 @@ public class QRObjectPositioner : MonoBehaviour
             // Sphere が削除されている場合は再生成（ループ機能）
             if (!qrSphereObjects.ContainsKey(uuid) || qrSphereObjects[uuid] == null)
             {
-                GameObject sphere = CreateSphereWithCollider();
-                sphere.transform.SetParent(existingObject.transform);
-                sphere.transform.localPosition = new Vector3(0, sphereHeightOffset, 0);
+                GameObject sphere = Instantiate(spherePrefab);
+                float sphereWorldHeight = cubeHeightOffset + sphereHeightOffset;
+                sphere.transform.position = existingObject.transform.position + Vector3.up * sphereWorldHeight;
+                sphere.transform.SetParent(existingObject.transform, true); // world position stays
                 sphere.transform.localRotation = Quaternion.identity;
-                sphere.transform.localScale = Vector3.one * sphereScale;
+                sphere.transform.localScale = spherePrefab.transform.localScale * sphereScale;
                 sphere.name = "CollisionSphere";
 
                 qrSphereObjects[uuid] = sphere;
@@ -200,8 +213,15 @@ public class QRObjectPositioner : MonoBehaviour
     /// <summary>
     /// QR 喪失時：Sphere（当たり判定用）のみを削除、Cube（マーカー）は残す
     /// </summary>
-    private void OnQRLost(string uuid)
+    private void OnQRLost(QRInfo info)
     {
+        if (info == null)
+        {
+            LogErrorPos("[QR_LOST] QRInfo is null");
+            return;
+        }
+
+        string uuid = info.uuid;
         LogPos($"[QR_LOST] UUID: {uuid}");
         LogPos($"[QR_LOST] qrSphereObjects.ContainsKey: {qrSphereObjects.ContainsKey(uuid)}");
 
@@ -233,101 +253,6 @@ public class QRObjectPositioner : MonoBehaviour
         }
 
         // 注意: Cube マーカーは削除しない（QR 位置の視覚的参照のため）
-    }
-
-    /// <summary>
-    /// デフォルトオブジェクト Prefab を生成（キューブ）
-    /// </summary>
-    private GameObject CreateDefaultObjectPrefab()
-    {
-        GameObject prefab = new GameObject("DefaultQRObjectPrefab");
-        
-        // キューブメッシュを追加
-        MeshFilter meshFilter = prefab.AddComponent<MeshFilter>();
-        meshFilter.mesh = Resources.GetBuiltinResource<Mesh>("Cube.fbx");
-        
-        // マテリアルを追加
-        MeshRenderer meshRenderer = prefab.AddComponent<MeshRenderer>();
-        Material material = new Material(Shader.Find("Standard"));
-        material.color = Color.cyan;
-        meshRenderer.material = material;
-        
-        // Collider を追加
-        prefab.AddComponent<BoxCollider>();
-        
-        prefab.SetActive(false);  // Prefab なので非アクティブ化
-        
-        LogPos("[DEFAULT] ✓ Default cube prefab created");
-        return prefab;
-    }
-
-    /// <summary>
-    /// Cube マーカーを生成（QR 位置表示用、削除されない）
-    /// </summary>
-    private GameObject CreateCubeMarker()
-    {
-        GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        
-        // すべての Collider を削除
-        foreach (var collider in cube.GetComponents<Collider>())
-        {
-            Destroy(collider);
-        }
-        
-        // すべての MeshRenderer のマテリアルを設定
-        MeshRenderer[] renderers = cube.GetComponentsInChildren<MeshRenderer>();
-        Color cubeColor = new Color(0.3f, 0.8f, 1.0f, 0.7f);  // 半透明の青
-        
-        foreach (var renderer in renderers)
-        {
-            // 各 renderer のすべてのマテリアルを変更
-            Material[] materials = new Material[renderer.materials.Length];
-            for (int i = 0; i < materials.Length; i++)
-            {
-                Material mat = new Material(renderer.materials[i].shader);
-                mat.color = cubeColor;
-                materials[i] = mat;
-            }
-            renderer.materials = materials;
-        }
-        
-        LogPos("[CREATE] ✓ Cube marker created (Color: Cyan)");
-        return cube;
-    }
-
-    /// <summary>
-    /// Sphere（視覚的ターゲット）を生成
-    /// 物理衝突は使用せず、QR 認識喪失による当たり判定のみ
-    /// </summary>
-    private GameObject CreateSphereWithCollider()
-    {
-        GameObject sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        
-        // すべての Collider を削除
-        foreach (var collider in sphere.GetComponents<Collider>())
-        {
-            Destroy(collider);
-        }
-        
-        // すべての MeshRenderer のマテリアルを設定
-        MeshRenderer[] renderers = sphere.GetComponentsInChildren<MeshRenderer>();
-        Color sphereColor = new Color(1.0f, 1.0f, 0.0f, 1.0f);  // 黄色（ターゲット表示）
-        
-        foreach (var renderer in renderers)
-        {
-            // 各 renderer のすべてのマテリアルを変更
-            Material[] materials = new Material[renderer.materials.Length];
-            for (int i = 0; i < materials.Length; i++)
-            {
-                Material mat = new Material(renderer.materials[i].shader);
-                mat.color = sphereColor;
-                materials[i] = mat;
-            }
-            renderer.materials = materials;
-        }
-        
-        LogPos("[CREATE] ✓ Visual target sphere created (Color: Yellow, no physics)");
-        return sphere;
     }
 
     /// <summary>
