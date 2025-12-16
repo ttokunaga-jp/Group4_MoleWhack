@@ -1026,14 +1026,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 97cc437fd439fc1418a5c23dd9be01da, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::QRObjectPositioner
-  qrCodeTracker: {fileID: 1375737369}
-  objectPrefab: {fileID: 207147540}
+  poseLocker: {fileID: 555555557}
+  cubePrefab: {fileID: 2034738238671349268, guid: 7f25b425015e39341afa3228f7082036, type: 3}
+  spherePrefab: {fileID: 2675526346689840863, guid: b58e321351757bf4a84321d485a08be6, type: 3}
   enablePositioningLogging: 1
+  useLockedPoseOnly: 1
+  clearOnCollect: 1
   positionOffset: {x: 0, y: 0, z: 0}
   rotateWithQR: 1
   cubeScale: 0.2
+  cubeHeightOffset: -0.1
   sphereScale: 0.15
-  sphereHeightOffset: 0.25
+  sphereHeightOffset: 0.35
 --- !u!4 &845719446
 Transform:
   m_ObjectHideFlags: 0
@@ -1060,7 +1064,7 @@ GameObject:
   - component: {fileID: 871263448}
   - component: {fileID: 871263447}
   m_Layer: 0
-  m_Name: QRHitDetector
+  m_Name: HitValidator
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1075,29 +1079,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 871263446}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d9e0d11d002ab5c438b10f0a38ea74ea, type: 3}
+  m_Script: {fileID: 11500000, guid: 6583a163fd837684286c524b12864c05, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::QRHitDetector
-  qrCodeTracker: {fileID: 1375737369}
-  qrObjectPositioner: {fileID: 845719445}
-  enableHitLogging: 1
+  m_EditorClassIdentifier: Assembly-CSharp::HitValidator
+  cameraMonitor: {fileID: 2113720332}
+  maxLossWindow: 0.8
+  enableDetailedLogging: 1
   OnHitSuccess:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 1636572261}
-        m_TargetAssemblyTypeName: 
-        m_MethodName: 
-        m_Mode: 0
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: 
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
-  totalHits: 0
-  lastHitTime: 0
+      m_Calls: []
 --- !u!4 &871263448
 Transform:
   m_ObjectHideFlags: 0
@@ -1124,7 +1114,7 @@ GameObject:
   - component: {fileID: 1375737370}
   - component: {fileID: 1375737369}
   m_Layer: 0
-  m_Name: QRCodeTracker
+  m_Name: QRManager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1139,11 +1129,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 1375737368}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a1b3395c5cbde544387e0f3e427725ce, type: 3}
+  m_Script: {fileID: 11500000, guid: 9a7e9774c8b680e43a632adf7c4fcf4c, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::QRCodeTracker_MRUK
+  m_EditorClassIdentifier: Assembly-CSharp::QRManager
   targetCubeTransform: {fileID: 0}
   enableDetailedLogging: 1
+  detectionCooldown: 0.5
+  lostTimeout: 0.6
 --- !u!4 &1375737370
 Transform:
   m_ObjectHideFlags: 0
@@ -1471,6 +1463,207 @@ Transform:
   m_Children: []
   m_Father: {fileID: 117026406}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &555555555
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 555555556}
+  - component: {fileID: 555555557}
+  - component: {fileID: 555555558}
+  m_Layer: 0
+  m_Name: QRPoseLocker
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &555555556
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 555555555}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &555555557
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 555555555}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f8f7f78fcb2491aa8fa3eac2b7740b8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::QRPoseLocker
+  collectionDuration: 10
+  minimumSamples: 5
+  enableLogging: 1
+  autoStartOnEnable: 1
+--- !u!114 &555555558
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 555555555}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6bcfd0a62f284d1a8897eb2d067824a5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::QRTrustMonitor
+  distanceThresholdMeters: 1
+  trustLowThreshold: 0.5
+  enableLogging: 1
+--- !u!1 &666666660
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 666666661}
+  - component: {fileID: 666666662}
+  m_Layer: 0
+  m_Name: GameplayUI
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &666666661
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 666666660}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &666666662
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 666666660}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e51c2b4dc924f40a9f41b10eaa520c4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameplayUIController
+--- !u!1 &777777770
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 777777771}
+  - component: {fileID: 777777772}
+  m_Layer: 0
+  m_Name: GameFlowController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &777777771
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 777777770}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &777777772
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 777777770}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4208b5e63f4c4982b09d9cd1c01f3f0c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameFlowController
+  setupSceneName: Setup
+  gameplaySceneName: Gameplay
+  resultsSceneName: Results
+--- !u!1 &2113720331
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2113720333}
+  - component: {fileID: 2113720332}
+  m_Layer: 0
+  m_Name: CameraOrientationMonitor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2113720332
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2113720331}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cc756804c5622934296112de16d60dbf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CameraOrientationMonitor
+  minVisibleUUIDs: 2
+  enableLogging: 1
+--- !u!4 &2113720333
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2113720331}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -1481,7 +1674,11 @@ SceneRoots:
   - {fileID: 1964602100}
   - {fileID: 207147545}
   - {fileID: 1375737370}
+  - {fileID: 555555556}
+  - {fileID: 777777771}
+  - {fileID: 2113720333}
   - {fileID: 773190231}
   - {fileID: 845719446}
   - {fileID: 871263448}
   - {fileID: 1636572265}
+  - {fileID: 666666661}

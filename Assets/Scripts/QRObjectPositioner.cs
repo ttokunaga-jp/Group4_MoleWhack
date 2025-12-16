@@ -18,9 +18,12 @@ using System.Linq;
 public class QRObjectPositioner : MonoBehaviour
 {
     [Header("References")]
+    [SerializeField] private QRPoseLocker poseLocker;
     [SerializeField] private GameObject cubePrefab;
     [SerializeField] private GameObject spherePrefab;
     [SerializeField] private bool enablePositioningLogging = true;
+    [SerializeField] private bool useLockedPoseOnly = true;
+    [SerializeField] private bool clearOnCollect = true;
 
     [Header("Positioning Settings")]
     [SerializeField] private Vector3 positionOffset = Vector3.zero;
@@ -45,12 +48,15 @@ public class QRObjectPositioner : MonoBehaviour
     private const float poseHistorySeconds = 5f; // 過去5秒を対象
     private const float iqrOutlierK = 1.5f;      // 外れ値判定の係数
 
+    private bool IsLockedMode => poseLocker != null && useLockedPoseOnly;
+
     private void Start()
     {
         LogPos("[START] QRObjectPositioner initializing...");
 
         LogPos($"[START] Cube Prefab (Inspector): {(cubePrefab != null ? cubePrefab.name : "null")}");
         LogPos($"[START] Sphere Prefab (Inspector): {(spherePrefab != null ? spherePrefab.name : "null")}");
+        LogPos($"[START] PoseLocker (Inspector): {(poseLocker != null ? poseLocker.name : "null")}");
 
         // Inspector 未設定なら Resources から読み込みを試みる（最終的に null なら停止）
         if (cubePrefab == null)
@@ -76,19 +82,37 @@ public class QRObjectPositioner : MonoBehaviour
             return;
         }
 
-        // QRManager のイベントに登録
-        if (QRManager.Instance != null)
+        if (poseLocker == null)
         {
-            QRManager.Instance.OnQRAdded += OnQRAdded;
-            QRManager.Instance.OnQRUpdated += OnQRUpdated;
-            QRManager.Instance.OnQRLost += OnQRLost;
-            LogPos("[START] ✓ Registered to QRManager events");
+            poseLocker = FindObjectOfType<QRPoseLocker>();
+            if (poseLocker != null)
+            {
+                LogPos("[START] ✓ Found QRPoseLocker in scene");
+            }
+        }
+
+        if (poseLocker != null && useLockedPoseOnly)
+        {
+            poseLocker.OnPoseLocked += HandlePoseLocked;
+            poseLocker.OnCollectingStarted += HandleCollectingStarted;
+            LogPos("[START] ✓ Using locked poses only (QRPoseLocker)");
         }
         else
         {
-            LogErrorPos("[START] QRManager instance not found!");
-            enabled = false;
-            return;
+            // QRManager のイベントに登録（従来追従モード）
+            if (QRManager.Instance != null)
+            {
+                QRManager.Instance.OnQRAdded += OnQRAdded;
+                QRManager.Instance.OnQRUpdated += OnQRUpdated;
+                QRManager.Instance.OnQRLost += OnQRLost;
+                LogPos("[START] ✓ Registered to QRManager events (live follow mode)");
+            }
+            else
+            {
+                LogErrorPos("[START] QRManager instance not found!");
+                enabled = false;
+                return;
+            }
         }
 
         LogPos("[START] ✓ QRObjectPositioner ready");
@@ -101,6 +125,12 @@ public class QRObjectPositioner : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (poseLocker != null)
+        {
+            poseLocker.OnPoseLocked -= HandlePoseLocked;
+            poseLocker.OnCollectingStarted -= HandleCollectingStarted;
+        }
+
         if (QRManager.Instance != null)
         {
             QRManager.Instance.OnQRAdded -= OnQRAdded;
@@ -132,6 +162,7 @@ public class QRObjectPositioner : MonoBehaviour
     /// </summary>
     private void OnQRUpdated(QRInfo info)
     {
+        if (IsLockedMode) return;
         if (info == null) return;
         if (!qrMarkerObjects.ContainsKey(info.uuid)) return;
 
@@ -229,8 +260,9 @@ public class QRObjectPositioner : MonoBehaviour
     /// <summary>
     /// QR 検出時：Cube（マーカー）と Sphere（当たり判定用）を配置または位置を更新
     /// </summary>
-    private void OnQRDetected(string uuid, Vector3 position, Quaternion rotation)
+    private void OnQRDetected(string uuid, Vector3 position, Quaternion rotation, bool force = false)
     {
+        if (IsLockedMode && !force) return;
         LogPos($"[QR_DETECTED] UUID: {uuid}");
         LogPos($"[QR_DETECTED] Position: {position}");
 
@@ -328,6 +360,7 @@ public class QRObjectPositioner : MonoBehaviour
     /// </summary>
     private void OnQRLost(QRInfo info)
     {
+        if (IsLockedMode) return;
         if (info == null)
         {
             LogErrorPos("[QR_LOST] QRInfo is null");
@@ -436,5 +469,22 @@ public class QRObjectPositioner : MonoBehaviour
     private void LogErrorPos(string message)
     {
         Debug.LogError($"[QRObjectPositioner] {message}");
+    }
+
+    private void HandlePoseLocked(string uuid, Pose pose)
+    {
+        // Locked Pose を一度配置し、プレイ中は更新しない
+        LogPos($"[LOCKED_PLACE] UUID: {uuid}");
+        OnQRDetected(uuid, pose.position, pose.rotation, true);
+    }
+
+    private void HandleCollectingStarted()
+    {
+        if (clearOnCollect)
+        {
+            ClearAllObjects();
+            poseHistories.Clear();
+            LogPos("[COLLECT] Cleared objects for fresh locking");
+        }
     }
 }
