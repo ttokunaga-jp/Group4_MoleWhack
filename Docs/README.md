@@ -6,25 +6,55 @@
 - リファクタリング計画: `Docs/RefactoringPlan.md`（段階的移行プランと最新方針）
 
 ## 主要コンポーネント
-- **QRManager (Singleton)**: MRUK から QR Trackable を取得し、`OnQRAdded/OnQRUpdated/OnQRLost` を発火。`lostTimeout` で喪失判定を一元管理。
-- **QRInfo**: `firstPose` と `lastPose`、`lastSeenTime` を保持するデータクラス。
-- **QRObjectPositioner**: QR の位置に Cube/Sphere を生成。`OnQRUpdated` で最新 Pose に追従し、IQR で外れ値を除外したロバスト平均を使用。Prefab は Cube/Sphere を Inspector で割当。
-- **CubeColorOnQr**: QR 検出/喪失で色を変更して視覚フィードバック。
-- **CameraOrientationMonitor**: 現在認識中の UUID 数などから「カメラ向きOK」を判定。
-- **HitValidator**: `OnQRLost` をトリガーに複合判定（カメラ向き + 喪失時間ウィンドウ）。ハンマーは実物使用前提でコントローラ距離判定はしない。
-- **QRPoseLocker（導入予定）**: セットアップ時に10秒収集し、IQRで座標ロック。プレイ中は固定Poseを使用。
-- **QRTrustMonitor（導入予定）**: 各QRに紐づく既知UUID集合を管理し、現在可視のUUID集合と距離しきい値（例: ≤1m）で信頼度を判定。
+- **QRManager (Common_QRManager)**: MRUK から QR Trackable を取得し、`OnQRAdded/OnQRUpdated/OnQRLost` を発火。`lostTimeout` で喪失判定を一元管理。
+- **QRInfo (Common_QRInfo)**: `firstPose` と `lastPose`、`lastSeenTime` を保持するデータクラス。
+- **QRObjectPositioner (Setup_)**: QR の位置に RespawnPlace と Enemy を生成。IQR 平滑化は `Common_QRPoseSmoother`、生成は `Setup_QRAnchorFactory`、Prefab解決は `Setup_QRPrefabResolver` に委譲。Enemy は `EnemyVariant` で `EnemyDefault/Enemy1` を Inspector 切替でき、Defeated プレハブも指定可能。
+- **CubeColorOnQr (Gameplay_)**: 検出/喪失で色を変更して視覚フィードバック（RespawnPlace 側に付与）。
+- **CameraOrientationMonitor (Common_)**: 現在認識中の UUID 数などから「カメラ向きOK」を判定。
+- **HitValidator / HitPipeline (Gameplay_)**: `OnQRLost` をトリガーに複合判定（カメラ向き + 喪失時間ウィンドウ）。パイプライン経由で UnityEvent を発火。
+- **GameFlowController / GameSessionManager / ScoreManager (Common_)**: シーン遷移・進行・スコア管理。
+- **QRPoseLocker / QRTrustMonitor (Setup_)**: セットアップ時のロックと信頼度チェック（導入済み/予定を含む）。
 
-## ランタイムフロー（推奨）
-1. **セットアップシーン**  
-   - `QRPoseLocker` が10秒収集 → IQRロック → Pose固定。  
-   - `QRTrustMonitor` が既知UUID集合を確定（距離しきい値付き）。  
-   - ロック成功/失敗をUIに通知。必要ならリトライ。
-2. **ゲームプレイシーン**  
-   - 固定Poseを `QRObjectPositioner` で1回配置。プレイ中は更新しない。  
-   - `QRManager` の喪失イベントで `HitValidator` が判定。
-3. **ゲーム終了/リザルト**  
-   - 次ラウンドで再セットアップが必要ならセットアップシーンへ戻す。
+## シーン別ヒエラルキー（理想形）
+
+### Setup シーン（例: 画像参照）
+- Directional Light / Global Volume（任意）
+- OVRCameraRig
+- MRUK_Manager + MRUtilityKit
+- QRObjectPositioner （Setup_QRObjectPositioner）
+- QRPoseLockerRoot （Setup_QRPoseLocker、QRTrustMonitor をここに配置）
+- EventSystem / XR UI（必要に応じて）
+- Log （Common_LogToFile）
+
+Inspector 要点（Setup_QRObjectPositioner）
+- Prefabs: `RespawnPlace`、`EnemyDefault`、`EnemyDefaultDefeated`、`Enemy1`、`Enemy1Defeated`
+- EnemyVariant: `Default` / `Enemy1`（Inspector 切替で敵スキンを変更）
+- Positioning: `RespawnScale / HeightOffset`, `EnemyScale / HeightOffset`, `SpawnDefeatedOnLoss`
+
+### Gameplay シーン（例: 画像参照）
+- Directional Light / Global Volume
+- OVRCameraRig
+- MRUK_Manager + MRUtilityKit
+- QRManager（Common_QRManager, Bootstrap 可）
+- CameraOrientationMonitor（Common_CameraOrientationMonitor）
+- QRObjectPositioner（Setup_QRObjectPositioner: Gameplay 用 Prefab 設定）
+- HitPipeline（Gameplay_HitPipeline）
+- HitValidator（Gameplay_HitValidator: HitPipeline 参照、OnHitSuccess→Score/FX）
+- GameSessionManager / ScoreManager / GameFlowController（Common_*、Bootstrap 可）
+- UI: GameplayUIController / GameplayXRUIController（必要に応じ Canvas 配下）
+
+### Results シーン（例: 画像参照）
+- Directional Light / Global Volume
+- OVRCameraRig（または CameraRig）
+- Results_ResultUIController（Canvas 配下: TMP/Text, Replay/Setup ボタン）
+- GameFlowController（Common_GameFlowController、DontDestroy オブジェクトでも可）
+- （必要に応じ）ScoreManager / GameSessionManager を参照
+
+## コンポーネント付与チェックリスト
+- 共通: QRManager, QRManagerBootstrap, QRInfo, CameraOrientationMonitor, GameFlowController, GameSessionManager, ScoreManager, LogToFile
+- Setup: QRObjectPositioner, QRPoseLocker, QRTrustMonitor, SetupUI/SetupXRUIController, PermissionRequester（必要なら）
+- Gameplay: Gameplay_HitPipeline, Gameplay_HitValidator, Gameplay_CubeColorOnQr（RespawnPlace Prefab）、Gameplay_UI/XRUIController
+- Results: Results_ResultUIController（UI参照を接続）、必要なら GameFlowController
 
 ## デバッグの目安
 - `QRManager`: `[QR_ADDED] / [QR_UPDATED] / [QR_LOST]` が出ているか。`lostTimeout` が短すぎないか。

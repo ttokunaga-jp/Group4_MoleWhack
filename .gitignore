@@ -12,6 +12,16 @@
 /[Uu]ser[Ss]ettings/
 *.log
 
+# OS/editor local state that should never be shared
+.DS_Store
+Thumbs.db
+/.idea/
+/.vscode/
+/*.code-workspace
+*.orig
+*.bak
+*.swp
+
 # By default unity supports Blender asset imports, *.blend1 blender files do not need to be commited to version control.
 *.blend1
 *.blend1.meta
@@ -77,6 +87,7 @@ mono_crash.*
 *.unitypackage.meta
 *.app
 *.exe
+/*_Data/
 
 # Crashlytics generated file
 crashlytics-build.properties

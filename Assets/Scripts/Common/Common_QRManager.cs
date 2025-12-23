@@ -15,8 +15,7 @@ public class QRManager : MonoBehaviour
 {
     public static QRManager Instance { get; private set; }
 
-    [Header("References")]
-    [SerializeField] private Transform targetCubeTransform;
+    [Header("Logging")]
     [SerializeField] private bool enableDetailedLogging = true;
 
     [Header("Detection Settings")]
@@ -36,7 +35,6 @@ public class QRManager : MonoBehaviour
     private readonly Dictionary<string, QRInfo> trackedQRs = new Dictionary<string, QRInfo>();
     private readonly HashSet<string> currentTrackedUUIDs = new HashSet<string>();
     private MRUK mrukInstance;
-    private CubeColorOnQr cubeColorChanger;
     private int detectionCount = 0;
 
     public HashSet<string> CurrentTrackedUUIDs => currentTrackedUUIDs;
@@ -66,27 +64,6 @@ public class QRManager : MonoBehaviour
         }
 
         Log("[START] ✓ MRUK.Instance found");
-
-        // Cube の自動探索
-        if (targetCubeTransform == null)
-        {
-            GameObject cubeObj = GameObject.Find("Cube");
-            if (cubeObj != null)
-            {
-                targetCubeTransform = cubeObj.transform;
-                Log("[START] ✓ Found Cube automatically");
-            }
-        }
-
-        // CubeColorOnQr を取得
-        if (targetCubeTransform != null)
-        {
-            cubeColorChanger = targetCubeTransform.GetComponent<CubeColorOnQr>();
-            if (cubeColorChanger != null)
-            {
-                Log("[START] ✓ CubeColorOnQr component found");
-            }
-        }
 
         Log("[START] ✓ Initialization complete");
     }
@@ -138,12 +115,6 @@ public class QRManager : MonoBehaviour
 
                 Log($"[QR_ADDED] QR Code #{detectionCount}: {uuid}");
 
-                // Cube の色変更
-                if (cubeColorChanger != null)
-                {
-                    cubeColorChanger.OnQrRecognized(uuid);
-                }
-
                 OnQRAdded?.Invoke(newInfo);
             }
         }
@@ -166,12 +137,6 @@ public class QRManager : MonoBehaviour
         {
             QRInfo info = trackedQRs[uuid];
             Log($"[QR_LOST] QR Code lost (timeout): {uuid}");
-
-            // Cube をリセット
-            if (cubeColorChanger != null)
-            {
-                cubeColorChanger.ResetToDefault();
-            }
 
             OnQRLost?.Invoke(info);
             trackedQRs.Remove(uuid);

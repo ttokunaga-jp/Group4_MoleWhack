@@ -6,8 +6,9 @@ using UnityEngine.Events;
 /// QR 喪失時にカメラ向きと喪失時間をチェックする。
 /// ハンマーは実物使用を前提とし、Unity側でのスイング検出や距離計測は行わない。
 /// </summary>
-public class HitValidator : MonoBehaviour
+public class Gameplay_HitValidator : MonoBehaviour
 {
+    [SerializeField] private Gameplay_HitPipeline hitPipeline;
     [Header("References")]
     [SerializeField] private CameraOrientationMonitor cameraMonitor;
 
@@ -22,16 +23,28 @@ public class HitValidator : MonoBehaviour
     {
         Log("[START] HitValidator initializing...");
 
-        if (QRManager.Instance != null)
+        if (hitPipeline == null)
+            hitPipeline = GetComponent<Gameplay_HitPipeline>();
+
+        if (hitPipeline != null)
         {
-            QRManager.Instance.OnQRLost += ValidateHit;
-            Log("[START] ✓ Registered to QRManager.OnQRLost");
+            hitPipeline.OnHitSuccess.AddListener(InvokeHitSuccess);
+            Log("[START] ✓ Delegating to Gameplay_HitPipeline.OnHitSuccess");
+            return;
         }
         else
         {
-            LogError("[START] QRManager instance not found!");
-            enabled = false;
-            return;
+            if (QRManager.Instance != null)
+            {
+                QRManager.Instance.OnQRLost += ValidateHit;
+                Log("[START] ✓ Registered to QRManager.OnQRLost (legacy path)");
+            }
+            else
+            {
+                LogError("[START] QRManager instance not found!");
+                enabled = false;
+                return;
+            }
         }
 
         if (cameraMonitor == null)
@@ -42,7 +55,11 @@ public class HitValidator : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (QRManager.Instance != null)
+        if (hitPipeline != null)
+        {
+            hitPipeline.OnHitSuccess.RemoveListener(InvokeHitSuccess);
+        }
+        else if (QRManager.Instance != null)
         {
             QRManager.Instance.OnQRLost -= ValidateHit;
         }
@@ -90,6 +107,13 @@ public class HitValidator : MonoBehaviour
 
         // スコア加算（柔軟に変更できるよう GameSessionManager 経由）
         GameSessionManager.Instance?.RegisterHit(info.uuid);
+    }
+
+    private void InvokeHitSuccess(string uuid)
+    {
+        OnHitSuccess?.Invoke(uuid);
+        Log("[HIT_SUCCESS] ✓ OnHitSuccess invoked via Gameplay_HitPipeline");
+        GameSessionManager.Instance?.RegisterHit(uuid);
     }
 
     private void Log(string message)
