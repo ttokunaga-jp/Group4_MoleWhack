@@ -108,3 +108,8 @@ InitTestScene*.unity*
 *_BurstDebugInformation_DoNotShip/
 /20[0-9][0-9][0-9][0-9][0-9][0-9]/
 TempAssembly.dll
+
+# TextMesh Pro Examples & Extras (Ignoring to prevent CRLF conflicts)
+/[Aa]ssets/TextMesh Pro/Examples & Extras/
+/[Aa]ssets/TextMesh Pro/Fonts/LiberationSans.ttf
+/[Aa]ssets/TextMesh Pro/Sprites/EmojiOne.png
