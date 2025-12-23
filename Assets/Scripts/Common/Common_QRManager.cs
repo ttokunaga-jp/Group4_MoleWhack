@@ -101,6 +101,7 @@ public class QRManager : MonoBehaviour
                 // 既存 UUID: 位置更新のみ
                 QRInfo info = trackedQRs[uuid];
                 info.UpdatePose(new Pose(trackable.transform.position, trackable.transform.rotation));
+                info.isTracked = true;
                 OnQRUpdated?.Invoke(info);
             }
             else
@@ -111,6 +112,7 @@ public class QRManager : MonoBehaviour
                     uuid,
                     new Pose(trackable.transform.position, trackable.transform.rotation)
                 );
+                newInfo.isTracked = true;
                 trackedQRs[uuid] = newInfo;
 
                 Log($"[QR_ADDED] QR Code #{detectionCount}: {uuid}");
@@ -137,6 +139,7 @@ public class QRManager : MonoBehaviour
         {
             QRInfo info = trackedQRs[uuid];
             Log($"[QR_LOST] QR Code lost (timeout): {uuid}");
+            info.isTracked = false;
 
             OnQRLost?.Invoke(info);
             trackedQRs.Remove(uuid);

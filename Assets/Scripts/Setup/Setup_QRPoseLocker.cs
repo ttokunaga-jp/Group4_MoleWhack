@@ -21,7 +21,7 @@ public class QRPoseLocker : MonoBehaviour
     }
 
     [Header("Settings")]
-    [SerializeField] private float collectionDuration = 10f;
+    [SerializeField] private float collectionDuration = 30f;
     [SerializeField] private int minimumSamples = 5;
     [SerializeField] private bool enableLogging = true;
     [SerializeField] private bool autoStartOnEnable = true;
@@ -138,6 +138,8 @@ public class QRPoseLocker : MonoBehaviour
     {
         if (State != LockerState.Collecting) return;
         if (info == null) return;
+        // 追跡中のもののみ収集（喪失中は除外）
+        if (!info.isTracked) return;
 
         AddPoseSample(info.uuid, info.lastPose.position, info.lastPose.rotation);
     }

@@ -84,7 +84,7 @@ public class SetupXRUIController : MonoBehaviour
         {
             float elapsed = poseLocker.GetElapsedSeconds();
             float remaining = Mathf.Max(0f, poseLocker.CollectionDuration - elapsed);
-            timerText.text = $"残り: {remaining:F1}s";
+            timerText.text = $"Time Left: {remaining:F1}s";
         }
     }
 
@@ -100,7 +100,7 @@ public class SetupXRUIController : MonoBehaviour
         if (poseLocker == null || poseLocker.State != QRPoseLocker.LockerState.Locked) return;
         if (trustMonitor != null && trustMonitor.CurrentTrust < trustMonitor.TrustLowThreshold)
         {
-            SetStatus("信頼度が不足しています。再調整してください。");
+            SetStatus("Trust is low. Please realign and retry.");
             return;
         }
 
@@ -119,7 +119,7 @@ public class SetupXRUIController : MonoBehaviour
     {
         hasLocked = false;
         hasFailed = false;
-        SetStatus("スキャン中... (10秒)");
+        SetStatus("Scanning... (30s)");
         SetTimerVisible(true);
         UpdateButtons();
     }
@@ -128,7 +128,7 @@ public class SetupXRUIController : MonoBehaviour
     {
         hasLocked = true;
         hasFailed = false;
-        SetStatus($"ロック完了: {poseLocker?.LockedPoseCount ?? 0}件");
+        SetStatus($"Lock completed: {poseLocker?.LockedPoseCount ?? 0}");
         SetTimerVisible(false);
         UpdateButtons();
     }
@@ -137,7 +137,7 @@ public class SetupXRUIController : MonoBehaviour
     {
         hasFailed = true;
         hasLocked = false;
-        SetStatus("ロック失敗（サンプル不足など）");
+        SetStatus("Lock failed (insufficient samples)");
         SetTimerVisible(false);
         UpdateButtons();
     }
@@ -146,7 +146,7 @@ public class SetupXRUIController : MonoBehaviour
     {
         if (trustText != null)
         {
-            trustText.text = $"信頼度: {value:F2}";
+            trustText.text = $"Trust: {value:F2}";
         }
     }
 
@@ -159,15 +159,15 @@ public class SetupXRUIController : MonoBehaviour
             case QRPoseLocker.LockerState.Idle:
             case QRPoseLocker.LockerState.Retry:
             case QRPoseLocker.LockerState.Failed:
-                SetStatus("準備完了");
+                SetStatus("Ready");
                 SetTimerVisible(false);
                 break;
             case QRPoseLocker.LockerState.Collecting:
-                SetStatus("スキャン中... (10秒)");
+                SetStatus("Scanning... (30s)");
                 SetTimerVisible(true);
                 break;
             case QRPoseLocker.LockerState.Locked:
-                SetStatus($"ロック完了: {poseLocker.LockedPoseCount}件");
+                SetStatus($"Lock completed: {poseLocker.LockedPoseCount}");
                 SetTimerVisible(false);
                 break;
         }

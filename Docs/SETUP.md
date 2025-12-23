@@ -15,17 +15,88 @@
 
 `QRManager`, `QRPoseLocker`, `QRTrustMonitor` は `DontDestroyOnLoad` 等でシーンを跨いで維持。
 
-## ヒエラルキーの基本
+## ヒエラルキーの基本（現行）
 - `MRUtilityKit`（MRUK コンポーネント付き）
 - `QRManager`（Singleton）
-- `QRObjectPositioner`（Cube/Sphere Prefab を Inspector で割当）
-- `CameraOrientationMonitor` / `HitValidator`（複合判定用）
-- Cube Prefab に `CubeColorOnQr` を付与（検出/喪失で色変化）
+- `QRPoseLocker`（30秒収集で IQR 固定）
+- `QRTrustMonitor`（距離しきい値付きの既知UUID集合管理）
+- `QRObjectPositioner`（Respawn/Enemy Prefab を Inspector で割当、Locked Pose を使用）
+- `CameraOrientationMonitor` / `HitPipeline` / `HitValidator`（複合判定）
+
+### ヒエラルキー構造図（Unity Hierarchy）
+
+```
+Setup
+├─ Directional Light
+├─ OVRCameraRig
+│  ├─ TrackingSpace
+│  │  ├─ CenterEyeAnchor
+│  │  │  └─ Canvas (UI)
+│  │  └─ …(OVR default children)
+├─ MRUK_Manager (MRUK components)
+├─ MRUtilityKit (MRUK components)
+├─ QRPoseLockerRoot
+│  ├─ QRPoseLocker (script, DontDestroy)
+│  └─ QRTrustMonitor (script, DontDestroy)
+├─ QRObjectPositioner (script: Setup_QRObjectPositioner)  // Prefabs: hole, mole, mole_defeated, Golden_mole, Golden_mole_defeated
+├─ CameraOrientationMonitor (script: Common_CameraOrientationMonitor)
+├─ HitPipeline (script: Gameplay_HitPipeline)
+├─ HitValidator (script: Gameplay_HitValidator)
+├─ GameFlowController (script: Common_GameFlowController)
+├─ GameSessionManager (script: Common_GameSessionManager)
+├─ ScoreManager (script: Common_ScoreManager)
+└─ Log (script: Common_LogToFile)
+```
+
+Gameplay
+```
+Gameplay
+├─ Directional Light
+├─ Global Volume
+├─ OVRCameraRig
+│  ├─ TrackingSpace
+│  │  ├─ CenterEyeAnchor
+│  │  │  └─ Canvas (Gameplay UI/XRUI)
+│  │  └─ …(OVR default children)
+├─ MRUK_Manager (MRUK components)
+├─ MRUtilityKit (MRUK components)
+├─ QRManager (script: Common_QRManager)
+├─ QRObjectPositioner (script: Setup_QRObjectPositioner)  // Prefabs: hole, mole, mole_defeated, Golden_mole, Golden_mole_defeated
+├─ CameraOrientationMonitor (script: Common_CameraOrientationMonitor)
+├─ HitPipeline (script: Gameplay_HitPipeline)
+├─ HitValidator (script: Gameplay_HitValidator)
+├─ GameFlowController (script: Common_GameFlowController)
+├─ GameSessionManager (script: Common_GameSessionManager)
+├─ ScoreManager (script: Common_ScoreManager)
+└─ (Optional) SingleSceneSetupBootstrap (script: Gameplay_SingleSceneSetupBootstrap)
+```
+
+Results
+```
+Results
+├─ Directional Light
+├─ OVRCameraRig
+│  ├─ TrackingSpace
+│  │  ├─ CenterEyeAnchor
+│  │  │  └─ Canvas (Results UI)
+│  │  └─ …(OVR default children)
+├─ ResultUI (Canvas + script: Results_ResultUIController)
+├─ GameFlowController (script: Common_GameFlowController)
+├─ GameSessionManager (script: Common_GameSessionManager)
+└─ ScoreManager (script: Common_ScoreManager)
+```
+
+### Interaction UI ベストプラクティス（Unity 6 + Meta XR SDK v83 想定）
+- EventSystem: StandaloneInputModule ではなく Interaction SDK の PointableCanvasModule を使用。  
+- Canvas: World Space。Interaction SDK の Quick Actions（Add Ray/Poke Interaction to Canvas）で RayCanvas/PokeCanvas を付与し、CenterEyeAnchor を Event Camera に設定。  
+- Text: TextMeshPro (Mobile/Distance Field)。Outline/Underlay で可読性を確保。  
+- Passthrough: OVRPassthroughLayer は Underlay 推奨。UI 透明度は控えめにし、URP 透明バグ対策で AlphaToMask を無効にする（必要に応じて）。  
+- Occlusion/Depth: Building Blocks の Occlusion ブロックや MRUK の EnvironmentDepth を活用し、現実物体で UI を遮蔽。  
 
 ## セットアップ手順（Setup シーン例）
 1. MRUK 設定: Scene Understanding / QR Code Tracking を有効化
-2. Prefab 割当: `QRObjectPositioner` に Cube/Sphere Prefab を設定（未設定の場合は Resources/Prefabs から自動ロードも可）
-3. 収集開始: `QRPoseLocker` が 10秒間サンプル収集（`IsTracked==true` のみ採用）
+2. Prefab 割当: `QRObjectPositioner` に Respawn/EnemyDefault/Enemy1/Defeated を設定（未設定は Resources/Prefabs から自動ロード: hole/mole/Golden_mole 等）
+3. 収集開始: `QRPoseLocker` が 30秒サンプル収集（`IsTracked==true` のみ採用）
 4. ロック判定: IQR で外れ値除外後、ロバスト平均を算出し Pose を固定。サンプル不足なら Failed → 再セットアップ
 5. UUID 信頼度: `QRTrustMonitor` が既知UUID集合を確定し、以後は **距離しきい値（例: ≤1m）** 以内の UUID のみ集合に採用。プレイ中も可視集合と比較して信頼度を監視。
 6. ロック完了後: Gameplay シーンへ遷移し、固定Poseを `QRObjectPositioner` で1回配置。
@@ -45,8 +116,8 @@ adb shell am start -n com.UnityTechnologies.com.unity.template.urpblank/com.unit
 - Hit 判定: `HitValidator` でカメラ向き + 喪失時間ウィンドウが機能しているか。
 
 ## トラブルシュート
-- **Prefab 未設定で無効化**: `QRObjectPositioner` に Cube/Sphere Prefab を割当（または Resources/Prefabs に配置）。
-- **座標がジャンプする**: セットアップ時の IQR ロックを有効化し、窓長/係数を調整。プレイ中は更新しない。
+- **Prefab 未設定で無効化**: `QRObjectPositioner` に Respawn/Enemy Prefab を割当（または Resources/Prefabs に配置）。
+- **座標がジャンプする**: セットアップ時の IQR ロックを有効化し、窓長/係数を調整。プレイ中は更新しない（Locked Pose を使う）。
 - **喪失判定が早すぎる**: `lostTimeout` を延長。`IsTracked==false` の Trackable は更新から除外。
 - **UUID 信頼度が低下**: 距離しきい値（例: ≤1m）を適用し、未知UUID混入を抑制。必要なら再セットアップ。
 

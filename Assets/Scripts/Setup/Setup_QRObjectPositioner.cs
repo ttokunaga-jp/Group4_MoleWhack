@@ -19,12 +19,14 @@ public class QRObjectPositioner : MonoBehaviour
     [SerializeField] private GameObject enemyDefaultDefeatedPrefab;
     [SerializeField] private GameObject enemy1Prefab;
     [SerializeField] private GameObject enemy1DefeatedPrefab;
+    [SerializeField] private QRPoseLocker poseLocker;
 
     [Header("Settings")]
     [SerializeField] private Vector3 positionOffset = Vector3.zero;
     [SerializeField] private bool rotateWithQR = true;
     [SerializeField] private bool spawnDefeatedOnLoss = true;
     [SerializeField] private bool enablePositioningLogging = true;
+    [SerializeField] private bool useLockedPoseOnly = true;
     [SerializeField] private EnemyVariant enemyVariant = EnemyVariant.Default;
 
     [Header("Transform Settings")]
@@ -66,6 +68,7 @@ public class QRObjectPositioner : MonoBehaviour
     private Common_QRPoseSmoother poseSmoother;
     private Setup_QRAnchorFactory anchorFactory;
     private Setup_QRPrefabResolver prefabResolver;
+    private readonly HashSet<string> placedLocked = new HashSet<string>();
 
     private void Awake()
     {
@@ -121,13 +124,24 @@ public class QRObjectPositioner : MonoBehaviour
     private void OnQRAdded(QRInfo info)
     {
         if (info == null) return;
-        OnQRDetected(info.uuid, info.lastPose.position, info.lastPose.rotation);
+        Pose poseToUse = info.lastPose;
+        if (useLockedPoseOnly && poseLocker != null && poseLocker.State == QRPoseLocker.LockerState.Locked && poseLocker.GetLockedPose(info.uuid, out var locked))
+        {
+            poseToUse = locked;
+        }
+        OnQRDetected(info.uuid, poseToUse.position, poseToUse.rotation);
     }
 
     private void OnQRUpdated(QRInfo info)
     {
         if (info == null) return;
         if (!qrMarkerObjects.ContainsKey(info.uuid)) return;
+
+        if (useLockedPoseOnly && poseLocker != null && poseLocker.State == QRPoseLocker.LockerState.Locked)
+        {
+            // ロック済みなら更新しない
+            return;
+        }
 
         Vector3 finalPosition = info.lastPose.position + positionOffset;
         Quaternion finalRotation = rotateWithQR ? info.lastPose.rotation : Quaternion.identity;
@@ -170,11 +184,21 @@ public class QRObjectPositioner : MonoBehaviour
 
             qrMarkerObjects[uuid] = parentObject;
             qrEnemyObjects[uuid] = enemy;
+            if (useLockedPoseOnly && poseLocker != null && poseLocker.State == QRPoseLocker.LockerState.Locked)
+            {
+                placedLocked.Add(uuid);
+            }
 
             LogPos($"[QR_POSITIONED] ✓ Marker + Enemy created for QR: {uuid}");
         }
         else
         {
+            // Locked 配置を繰り返さない
+            if (useLockedPoseOnly && placedLocked.Contains(uuid))
+            {
+                return;
+            }
+
             GameObject existingObject = qrMarkerObjects[uuid];
             existingObject.transform.position = finalPosition;
             if (rotateWithQR)
